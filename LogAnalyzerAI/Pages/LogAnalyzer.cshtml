@@ -1,0 +1,208 @@
+@page
+@model LogAnalyzerAI.Pages.LogAnalyzerModel
+@{
+    ViewData["Title"] = "Analyseur de Logs";
+}
+
+<div class="container py-4">
+    <div class="d-flex align-items-center mb-4">
+        <h1 class="me-3">Analyseur de Logs</h1>
+        <span class="badge bg-info">Network</span>
+        <small class="text-muted ms-3">Analyse des fichiers logs avec IA</small>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-4">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">Chargement des fichiers</h5>
+
+                    <div id="dropZone" class="border rounded p-3 mb-3 text-center" style="background:#f8f9fa; cursor: pointer;">
+                        <div class="mb-2"><i class="bi bi-file-earmark-text" style="font-size:2rem;"></i></div>
+                        <div class="fw-semibold">Glisser-déposer vos fichiers ici</div>
+                        <div class="text-muted small">ou cliquez pour sélectionner (.log, .txt)</div>
+                        <input type="file" id="files" name="files" multiple style="display:none;" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Fichiers sélectionnés</label>
+                        <ul id="fileList" class="list-group small"></ul>
+                    </div>
+
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" id="optStrictJson" />
+                        <label class="form-check-label" for="optStrictJson">Forcer JSON strict (recommandé)</label>
+                    </div>
+
+                    <div class="d-grid">
+                        <button id="analyzeBtn" class="btn btn-primary btn-lg">Analyser</button>
+                    </div>
+                </div>
+            </div>
+
+           
+        </div>
+
+        <div class="col-lg-8">
+            <div id="loaderOverlay" class="d-none position-absolute top-0 start-0 w-100 h-100" style="background:rgba(255,255,255,0.7); z-index:20;"></div>
+
+            <div id="result" style="display:none;">
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h4>Rapport d'analyse</h4>
+                        <div>
+                            <button id="copyJsonBtn" class="btn btn-outline-secondary btn-sm me-2">Copier JSON</button>
+                            <button id="downloadBtn" class="btn btn-outline-primary btn-sm">Télécharger</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="resultContent"></div>
+            </div>
+
+            <div id="emptyState" class="text-center text-muted py-5">
+                <i class="bi bi-terminal-fill" style="font-size:3rem;"></i>
+                <p class="mt-3">Aucune analyse effectuée. Sélectionnez des fichiers à analyser.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Utilitaires
+        function escapeHtml(unsafe) { return unsafe ? unsafe.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;') : ''; }
+
+        // Elements
+        const inputFiles = document.getElementById('files');
+        const dropZone = document.getElementById('dropZone');
+        const fileList = document.getElementById('fileList');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const loaderOverlay = document.getElementById('loaderOverlay');
+        const resultEl = document.getElementById('result');
+        const resultContent = document.getElementById('resultContent');
+        const emptyState = document.getElementById('emptyState');
+        const copyJsonBtn = document.getElementById('copyJsonBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        // Drag & drop
+        dropZone.addEventListener('click', () => inputFiles.click());
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('border-primary'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('border-primary'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault(); dropZone.classList.remove('border-primary');
+            const dt = e.dataTransfer; if (dt && dt.files) { inputFiles.files = dt.files; renderFileList(); }
+        });
+
+        inputFiles.addEventListener('change', renderFileList);
+
+        function renderFileList() {
+            fileList.innerHTML = '';
+            const files = inputFiles.files;
+            if (!files || files.length === 0) {
+                const li = document.createElement('li'); li.className = 'list-group-item text-muted'; li.textContent = 'Aucun fichier sélectionné'; fileList.appendChild(li); return;
+            }
+            for (let i = 0; i < files.length; i++) {
+                const f = files[i];
+                const li = document.createElement('li'); li.className = 'list-group-item d-flex justify-content-between align-items-start';
+                li.innerHTML = `<div><strong>${escapeHtml(f.name)}</strong><div class="small text-muted">${Math.round(f.size/1024)} KB</div></div><div><button class="btn btn-sm btn-link text-danger" data-index="${i}">Suppr</button></div>`;
+                fileList.appendChild(li);
+            }
+
+            // delete handler
+            fileList.querySelectorAll('button[data-index]').forEach(b => b.addEventListener('click', (ev) => {
+                const idx = parseInt(ev.currentTarget.getAttribute('data-index'));
+                const dt = new DataTransfer();
+                const files = inputFiles.files;
+                for (let j = 0; j < files.length; j++) if (j !== idx) dt.items.add(files[j]);
+                inputFiles.files = dt.files; renderFileList();
+            }));
+        }
+
+        async function submitFiles() {
+            const files = inputFiles.files;
+            if (!files || files.length === 0) { alert('Veuillez sélectionner au moins un fichier.'); return; }
+
+            const formData = new FormData();
+            for (let i = 0; i < files.length; i++) formData.append('files', files[i]);
+            formData.append('strictJson', document.getElementById('optStrictJson').checked ? '1' : '0');
+
+            loaderOverlay.classList.remove('d-none');
+            emptyState.style.display = 'none';
+            resultEl.style.display = 'none';
+
+            try {
+                const resp = await fetch('/api/LogAnalyzer/analyze', { method: 'POST', body: formData });
+                if (!resp.ok) { const txt = await resp.text(); alert('Erreur API: ' + txt); return; }
+                const json = await resp.json();
+                renderResult(json);
+            } catch (err) { alert('Erreur: ' + err); }
+            finally { loaderOverlay.classList.add('d-none'); }
+        }
+
+        analyzeBtn.addEventListener('click', submitFiles);
+
+        function renderResult(r) {
+            resultContent.innerHTML = '';
+            resultEl.style.display = 'block';
+
+            // Summary card
+            const summaryCard = document.createElement('div'); summaryCard.className = 'card mb-3 shadow-sm';
+            summaryCard.innerHTML = `<div class="card-body">
+                <h5 class="card-title">Résumé</h5>
+                <p class="card-text">${escapeHtml(r.summary || '')}</p>
+                <div class="small text-muted">Machines détectées: ${escapeHtml((r.machineName || 'N/A'))} ${r.machineNames && r.machineNames.length? ' ('+r.machineNames.join(', ')+')':''}</div>
+            </div>`;
+            resultContent.appendChild(summaryCard);
+
+            // Key metrics
+            const metrics = document.createElement('div'); metrics.className = 'd-flex gap-2 mb-3';
+            metrics.innerHTML = `<div class="p-3 bg-light rounded"><strong>IPs</strong><div>${(r.ipAddresses||[]).map(i=>'<span class="badge bg-secondary me-1">'+escapeHtml(i)+'</span>').join('')}</div></div>
+                                 <div class="p-3 bg-light rounded"><strong>Erreurs</strong><div><span class="badge bg-danger">${(r.errors||[]).length}</span></div></div>
+                                 <div class="p-3 bg-light rounded"><strong>Problèmes réseau</strong><div><span class="badge bg-warning text-dark">${(r.networkIssues||[]).length}</span></div></div>`;
+            resultContent.appendChild(metrics);
+
+            // Accordion details
+            const accId = 'accDetails';
+            const acc = document.createElement('div'); acc.className = 'accordion'; acc.id = accId;
+
+            // Errors
+            const errorsHtml = (r.errors||[]).map(e=>'<pre class="mb-1 small">'+escapeHtml(e)+'</pre>').join('');
+            acc.innerHTML += `<div class="accordion-item">
+                <h2 class="accordion-header" id="headingErr"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseErr">Erreurs (${(r.errors||[]).length})</button></h2>
+                <div id="collapseErr" class="accordion-collapse collapse" data-bs-parent="#${accId}"><div class="accordion-body">${errorsHtml || '<div class="text-muted">Aucune erreur détectée.</div>'}</div></div>
+            </div>`;
+
+            // Network Issues
+            const netHtml = (r.networkIssues||[]).map(n=>'<div class="mb-1">'+escapeHtml(n)+'</div>').join('');
+            acc.innerHTML += `<div class="accordion-item">
+                <h2 class="accordion-header" id="headingNet"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseNet">Problèmes réseau (${(r.networkIssues||[]).length})</button></h2>
+                <div id="collapseNet" class="accordion-collapse collapse" data-bs-parent="#${accId}"><div class="accordion-body">${netHtml || '<div class="text-muted">Aucun problème réseau détecté.</div>'}</div></div>
+            </div>`;
+
+            // Timestamps
+            const tsHtml = (r.timestamps||[]).map(t=>'<span class="badge bg-light text-dark me-1">'+escapeHtml(t)+'</span>').join('');
+            acc.innerHTML += `<div class="accordion-item">
+                <h2 class="accordion-header" id="headingTs"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTs">Timestamps (${(r.timestamps||[]).length})</button></h2>
+                <div id="collapseTs" class="accordion-collapse collapse" data-bs-parent="#${accId}"><div class="accordion-body">${tsHtml || '<div class="text-muted">Aucun timestamp détecté.</div>'}</div></div>
+            </div>`;
+
+            // Raw JSON
+            const rawJson = JSON.stringify(r, null, 2);
+            acc.innerHTML += `<div class="accordion-item">
+                <h2 class="accordion-header" id="headingRaw"><button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseRaw">JSON brut</button></h2>
+                <div id="collapseRaw" class="accordion-collapse collapse" data-bs-parent="#${accId}"><div class="accordion-body"><pre class="small">${escapeHtml(rawJson)}</pre></div></div>
+            </div>`;
+
+            resultContent.appendChild(acc);
+
+            // Copy / Download handlers
+            copyJsonBtn.onclick = async () => { await navigator.clipboard.writeText(rawJson); alert('JSON copié'); };
+            downloadBtn.onclick = () => {
+                const blob = new Blob([rawJson], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = 'log-analysis.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+            };
+        }
+    </script>
+}
