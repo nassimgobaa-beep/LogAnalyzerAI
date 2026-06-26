@@ -1,0 +1,2 @@
+# LogAnalyzerAI
+App IA
