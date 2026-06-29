@@ -1,0 +1,52 @@
+2026-06-23 08:12:14,221 [INFO] [MACHINE:SRV-WEB-01] Application startup completed in 1423ms
+2026-06-23 08:12:15,004 [INFO] [MACHINE:SRV-WEB-01] Incoming request GET /api/users from 192.168.10.24
+2026-06-23 08:12:15,112 [INFO] [MACHINE:SRV-WEB-01] Response 200 OK in 108ms
+
+2026-06-23 08:13:02,998 [WARN] [MACHINE:SRV-API-02] High latency detected: 842ms on endpoint /api/orders
+2026-06-23 08:13:03,001 [INFO] [MACHINE:SRV-API-02] Request from 10.0.5.12
+
+2026-06-23 08:13:45,554 [ERROR] [MACHINE:SRV-DB-01] Database connection timeout after 5000ms
+2026-06-23 08:13:45,554 [ERROR] [MACHINE:SRV-DB-01] Exception: System.Data.SqlClient.SqlException (0x80131904): Timeout expired.
+   at System.Data.SqlClient.SqlConnection.OnError(SqlException exception)
+   at System.Data.SqlClient.SqlInternalConnectionTds..ctor(DbConnectionPoolIdentity identity)
+
+2026-06-23 08:14:01,112 [INFO] [MACHINE:SRV-WEB-01] Incoming request POST /api/login from 192.168.10.24
+2026-06-23 08:14:01,214 [WARN] [MACHINE:SRV-AUTH-01] Failed login attempt for user 'admin' from IP 192.168.10.24
+2026-06-23 08:14:01,215 [INFO] [MACHINE:SRV-AUTH-01] Response 401 Unauthorized
+
+2026-06-23 08:14:32,004 [INFO] [MACHINE:SRV-API-02] Incoming request GET /api/products from 10.0.5.12
+2026-06-23 08:14:32,998 [ERROR] [MACHINE:SRV-API-02] NullReferenceException: Object reference not set to an instance of an object.
+   at ProductService.GetProducts()
+   at ProductsController.Get()
+
+2026-06-23 08:15:10,441 [INFO] [MACHINE:SRV-NET-01] Ping to 172.16.0.1: success (12ms)
+2026-06-23 08:15:10,442 [INFO] [MACHINE:SRV-NET-01] Ping to 172.16.0.2: success (15ms)
+2026-06-23 08:15:10,443 [WARN] [MACHINE:SRV-NET-01] Ping to 172.16.0.3: timeout
+
+2026-06-23 08:15:55,998 [ERROR] [MACHINE:SRV-WEB-01] HTTP 500 on /api/orders
+2026-06-23 08:15:55,999 [ERROR] [MACHINE:SRV-WEB-01] StackTrace:
+   at OrdersController.GetOrders()
+   at lambda_method(Closure , Object , Object[] )
+
+2026-06-23 08:16:12,221 [INFO] [MACHINE:SRV-API-02] Cache refreshed successfully (duration: 312ms)
+
+2026-06-23 08:17:44,554 [WARN] [MACHINE:SRV-DB-01] Slow query detected: SELECT * FROM Orders (duration: 1298ms)
+
+2026-06-23 08:18:01,998 [ERROR] [MACHINE:SRV-NET-01] Network unreachable: gateway 172.16.0.254
+2026-06-23 08:18:02,001 [INFO] [MACHINE:SRV-NET-01] Retrying in 5 seconds...
+
+2026-06-23 08:18:07,004 [INFO] [MACHINE:SRV-NET-01] Retry success: gateway reachable (22ms)
+
+2026-06-23 08:19:12,554 [INFO] [MACHINE:SRV-WEB-01] Incoming request GET /health from 127.0.0.1
+2026-06-23 08:19:12,555 [INFO] [MACHINE:SRV-WEB-01] Response 200 OK
+
+2026-06-23 08:20:45,998 [ERROR] [MACHINE:SRV-API-02] OutOfMemoryException: Insufficient memory to continue execution
+   at System.String.Concat(String str0, String str1)
+   at ReportService.GenerateReport()
+
+2026-06-23 08:21:10,112 [INFO] [MACHINE:SRV-AUTH-01] User 'service-account' authenticated successfully from 10.0.5.12
+
+2026-06-23 08:22:33,554 [WARN] [MACHINE:SRV-WEB-01] High CPU usage detected: 92%
+2026-06-23 08:22:34,112 [INFO] [MACHINE:SRV-WEB-01] CPU usage back to normal: 34%
+
+2026-06-23 08:23:55,998 [INFO] [MACHINE:SRV-NET-01] Network scan completed: 3 hosts unreachable
