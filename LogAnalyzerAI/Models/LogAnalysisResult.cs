@@ -1,22 +1,22 @@
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace LogAnalyzerAI.Models
 {
+    // Strict JSON schema required by the user:
+    // { "machine": string, "ip": ["..."], "errors": ["..."], "summary": "..." }
     public class LogAnalysisResult
     {
-        // Premier nom de machine détecté (conforme à la demande)
-        public string? MachineName { get; set; }
+        [JsonPropertyName("machine")]
+        public string? Machine { get; set; }
 
-        // Liste des noms de machines détectés (fonctionnalité supplémentaire)
-        public List<string> MachineNames { get; set; } = new List<string>();
+        [JsonPropertyName("ip")]
+        public List<string> Ip { get; set; } = new List<string>();
 
-        public List<string> IpAddresses { get; set; } = new List<string>();
+        [JsonPropertyName("errors")]
         public List<string> Errors { get; set; } = new List<string>();
-        public List<string> NetworkIssues { get; set; } = new List<string>();
 
-        // Timestamps détectés dans les logs (fonctionnalité supplémentaire)
-        public List<string> Timestamps { get; set; } = new List<string>();
-
+        [JsonPropertyName("summary")]
         public string? Summary { get; set; }
     }
 }

@@ -20,3 +20,29 @@ html {
 body {
   margin-bottom: 60px;
 }
+
+/* Logo navbar : taille agrandie et responsive */
+.navbar-logo {
+    height: 140px;       /* taille par défaut sur écrans larges */
+    max-height: 140px;
+    width: auto;
+    display: inline-block;
+    vertical-align: middle;
+    object-fit: contain;
+}
+
+/* Ajustement pour tablettes / petits écrans */
+@media (max-width: 991.98px) {
+  .navbar-logo {
+    height: 110px;
+    max-height: 110px;
+  }
+}
+
+/* Ajustement pour mobiles */
+@media (max-width: 575.98px) {
+  .navbar-logo {
+    height: 56px;    /* petite taille pour mobile */
+    max-height: 56px;
+  }
+}
