@@ -73,34 +73,115 @@ namespace LogAnalyzerAI.Services
         {
             var result = new LogAnalysisResult();
 
-            // Machine names: heuristique
-            var machineMatches = Regex.Matches(logs, @"\b(hostname|machine|server)[:=]\s*([\w\-\.]+)", RegexOptions.IgnoreCase);
-            foreach (Match m in machineMatches)
+            if (string.IsNullOrWhiteSpace(logs))
             {
-                var name = m.Groups[2].Value.Trim();
-                if (!string.IsNullOrEmpty(name))
-                {
-                    if (string.IsNullOrEmpty(result.Machine)) result.Machine = name;
-                    if (!result.Ip.Contains(name)) result.Ip.Add(name);
-                }
+                result.Summary = "Aucun contenu de log fourni.";
+                return result;
             }
 
-            // IPs
+            // timestamps (format dd/MM/yyyy HH:mm:ss)
+            var tsMatches = Regex.Matches(logs, @"\b\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2}:\d{2}\b");
+            foreach (Match m in tsMatches) if (!result.Timestamps.Contains(m.Value)) result.Timestamps.Add(m.Value);
+
+            // hostnames (ex: vw069708.hosting.gfi) — capture noms avec au moins un point
+            var hostnameMatches = Regex.Matches(logs, @"\b([a-zA-Z0-9\-]+(?:\.[a-zA-Z0-9\-]+)+)\b");
+            foreach (Match m in hostnameMatches)
+            {
+                var name = m.Groups[1].Value.Trim();
+
+                // Exclure motifs clairement non-host (dates, times, numeric-only)
+                if (Regex.IsMatch(name, @"^\d{1,2}/\d{1,2}/\d{2,4}$")) continue;
+                if (name.Length < 4) continue;
+
+                if (!result.MachineNames.Contains(name)) result.MachineNames.Add(name);
+                if (!result.IpAddresses.Contains(name)) result.IpAddresses.Add(name); // also push to ipAddresses for UI
+                if (!result.Ip.Contains(name)) result.Ip.Add(name); // legacy field
+                if (string.IsNullOrEmpty(result.MachineName)) result.MachineName = name;
+                if (string.IsNullOrEmpty(result.Machine)) result.Machine = name;
+            }
+
+            // IPs (v4)
             var ipMatches = Regex.Matches(logs, @"\b(?:\d{1,3}\.){3}\d{1,3}\b");
             foreach (Match m in ipMatches)
             {
-                if (!result.Ip.Contains(m.Value)) result.Ip.Add(m.Value);
+                var ip = m.Value;
+                if (!result.IpAddresses.Contains(ip)) result.IpAddresses.Add(ip);
+                if (!result.Ip.Contains(ip)) result.Ip.Add(ip);
             }
 
-            // Errors
-            var errorLines = Regex.Matches(logs, "(?im)^.*(?:Exception|ERROR|Error|WARN|Warning).*$");
+            // Erreurs et problèmes réseau
+            var errorLines = Regex.Matches(logs, "(?im)^.*(?:Exception|ERROR|Error|WARN|Warning|timeout|failed|refused|denied).*$");
             foreach (Match m in errorLines)
             {
                 var line = m.Value.Trim();
                 if (!result.Errors.Contains(line)) result.Errors.Add(line);
+                if (!result.NetworkIssues.Contains(line)) result.NetworkIssues.Add(line);
             }
 
-            result.Summary = $"Machines détectées: {(result.Machine ?? "N/A")} - IPs: {string.Join(", ", result.Ip)} - Erreurs: {result.Errors.Count}";
+            // Détection heuristique de liaisons / connexions à partir de motifs courants
+            var connPatterns = new[]
+            {
+                // from X to Y
+                new { Pattern = @"\bfrom\s+([^\s,:;]+)\s+to\s+([^\s,:;]+)", Options = RegexOptions.IgnoreCase },
+                // connected to X[:port]
+                new { Pattern = @"\bconnected to\s+([^\s,:;]+)(?::(\d+))?", Options = RegexOptions.IgnoreCase },
+                // accepted connection from X
+                new { Pattern = @"\baccepted connection from\s+([^\s,:;]+)(?::(\d+))?", Options = RegexOptions.IgnoreCase },
+                // established connection to X[:port]
+                new { Pattern = @"\bestablished (?:tcp|udp)?\s*connection to\s+([^\s,:;]+)(?::(\d+))?", Options = RegexOptions.IgnoreCase },
+                // arrow style -> target
+                new { Pattern = @"\b->\s*([^\s,;]+)", Options = RegexOptions.None }
+            };
+
+            foreach (var p in connPatterns)
+            {
+                var matches = Regex.Matches(logs, p.Pattern, p.Options);
+                foreach (Match m in matches)
+                {
+                    try
+                    {
+                        if (m.Groups.Count >= 3 && !string.IsNullOrEmpty(m.Groups[2].Value))
+                        {
+                            // patterns with two groups (from X to Y) or with optional port captured
+                            if (p.Pattern.StartsWith(@"\bfrom"))
+                            {
+                                var src = m.Groups[1].Value.Trim();
+                                var tgt = m.Groups[2].Value.Trim();
+                                var c = new Models.ConnectionInfo { Source = src, Target = tgt, Line = m.Value.Trim() };
+                                result.Connections.Add(c);
+                            }
+                            else
+                            {
+                                var target = m.Groups[1].Value.Trim();
+                                int? port = null;
+                                if (int.TryParse(m.Groups[2].Value, out var pval)) port = pval;
+                                var c2 = new Models.ConnectionInfo { Target = target, Port = port, Line = m.Value.Trim() };
+                                result.Connections.Add(c2);
+                            }
+                        }
+                        else if (m.Groups.Count >= 2)
+                        {
+                            var g1 = m.Groups[1].Value.Trim();
+                            var c3 = new Models.ConnectionInfo { Target = g1, Line = m.Value.Trim() };
+                            result.Connections.Add(c3);
+                        }
+                    }
+                    catch
+                    {
+                        // ignoré — heuristique non critique
+                    }
+                }
+            }
+
+            // Enrichissement: si pas de connections détectées, message explicite
+            if (result.Connections.Count == 0)
+            {
+                result.Summary = "Aucune liaison réseau explicite détectée dans les logs fournis.";
+            }
+            else
+            {
+                result.Summary = $"Liaisons détectées: {result.Connections.Count} - IPs: {string.Join(", ", result.IpAddresses)} - Erreurs: {result.Errors.Count}";
+            }
 
             return result;
         }
